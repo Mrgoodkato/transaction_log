@@ -1,0 +1,34 @@
+When checking in the interpreted log report we need to take the following into account:
+
+1) Each tally out is a movement that is under an action Tally Out Movement or Rollback Movement.
+2) A tally out only can have 1 Tally Out Movement (of whatever items we are retrieving) at the time.
+3) A tally out can be repeated only if there is a rollback previously performed.
+4) A rollback can only be performed if there is a Tally Out Movement previously performed.
+5) The same tally out number and item will be repeated in two rows if there is a different tally in in each row.
+
+ALGORITHM:
+
+1) Take the whole part of DF with each tally out in a separate DF.
+2) In a for loop:
+    
+    for tout in tallyout:
+
+        - Check what action is being performed
+        - Go row by row extracting all item names in a list.
+        - Go row by row extracting all tally in numbers.
+        - Go row by row adding up all qtys extracted - rolledback.
+
+        - IF the current action changes, then store the items and tally ins unique lists, along with the sums of qtys in an object list.
+        - IF there is a previous object in the list compare current list with previous list:
+            
+            - In the comparison, check if the items, tally ins and qtys are equal from one another.
+            - IF not, create an error list object and store the information on the discrepancy there.
+
+
+DISCREPANCY CHECK:
+
+In point 5) of the introduction:
+The same tally out number and item will be repeated in two rows if there is a different tally in in each row.
+
+    - Retrieve each row's tally in and item no and join them in a single string in a list to be stored in the df object being created
+    - IF the pair (item - tally in) repeats on a list, create an error.
