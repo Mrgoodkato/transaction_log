@@ -41,11 +41,24 @@ Indexed by the filename of that report
     for entry in entries:
 
         xl_name = 'TallyTransactionLogReport'
-        log_df = pd.read_excel('files/{}'.format(entry), sheet_name=xl_name)
+        util.setupExcel(f'files/{entry}')
+        
+        try:
+            log_df = pd.read_excel('temp/modified.xlsx', sheet_name=xl_name)
+        except:
+            print('Error reading the excel file, please confirm the file is a valid transaction log file from ACELYNK')
+            return 0
 
-        list_of_items = log_df.loc[:, 'Item Code'].unique()
-        list_of_tallyouts = log_df.loc[:, 'DONumber\n'].unique()
-        importer = log_df.loc[:, 'Importer Account'].unique()
+        if(os.path.exists('temp/modified.xlsx')):
+            os.remove('temp/modified.xlsx')
+
+        try:
+            list_of_items = log_df.loc[:, 'Item Code'].unique()
+            list_of_tallyouts = log_df.loc[:, 'DONumber\n'].unique()
+            importer = log_df.loc[:, 'Importer Account'].unique()
+        except:
+            print('File is not a valid transaction log file, please review')
+            return 0
 
         file_name = ''
 
@@ -97,7 +110,7 @@ def processDatabase(df):
         df (pd.dataframe): Dataframe pertaining to a tally transaction log report interpreted
 
     Returns:
-        _type_: _description_
+        pd.dataframe: Final log interpretation of all the actions taken in the original transaction log report
     """
 
     storage_object = {}
@@ -114,10 +127,10 @@ def processDatabase(df):
         #Check for the quantity to be stored
         qty = 0
 
-        if(tallyout[5] == 0):
-            qty = tallyout[6]
+        if(tallyout.iloc[5] == 0):
+            qty = tallyout.iloc[6]
         else:
-            qty = tallyout[5]
+            qty = tallyout.iloc[5]
 
         #Creation of the storage_object in first iteration
         if(len(key_marker) == 0):
@@ -133,10 +146,10 @@ def processDatabase(df):
                 }
             )
 
-            error_check_list.append(str(tallyout[1]) + str(tallyout[2]))
+            error_check_list.append(str(tallyout.iloc[1]) + str(tallyout.iloc[2]))
 
         #Check if the previous action was the same as the current one, if different execute
-        elif(df.loc[key_marker[key_indx-1], 'Action'] != tallyout[0]):
+        elif(df.loc[key_marker[key_indx-1], 'Action'] != tallyout.iloc[0]):
 
             error_check_list = []
 
@@ -151,13 +164,13 @@ def processDatabase(df):
                 }
             )
 
-            error_check_list.append(str(tallyout[1]) + str(tallyout[2]))
+            error_check_list.append(str(tallyout.iloc[1]) + str(tallyout.iloc[2]))
 
         else:
             
             storage_object[index]['Indexes'].append(key)
-            storage_object[index]['Item Nos'].append(tallyout[1])
-            storage_object[index]['Tally Ins'].append(tallyout[2])
+            storage_object[index]['Item Nos'].append(tallyout.iloc[1])
+            storage_object[index]['Tally Ins'].append(tallyout.iloc[2])
 
             #Get rid of duplicates
             storage_object[index]['Item Nos'] = util.uniqueList(storage_object[index]['Item Nos'])
@@ -165,11 +178,11 @@ def processDatabase(df):
             
             storage_object[index]['Qty'] += qty
             
-            error_check_list.append(str(tallyout[1]) + str(tallyout[2]))
+            error_check_list.append(str(tallyout.iloc[1]) + str(tallyout.iloc[2]))
 
             if(util.duplicateFinder(error_check_list)):
                 storage_object[index]['Error'] = True
-                storage_object[index]['Err-location'].append(str(tallyout[1]) + ' ' + str(tallyout[2])) 
+                storage_object[index]['Err-location'].append(str(tallyout.iloc[1]) + ' ' + str(tallyout.iloc[2])) 
 
 
         key_marker.append(key)
@@ -179,8 +192,15 @@ def processDatabase(df):
 
     return storage_dataframe
 
-#Saves all tally out dataframes into separate files over separate folders according to the db object
+
 def saveFinalAnalysis(df, file_name, tallyout):
+    """Saves all tally out dataframes into separate files over separate folders according to the db object
+
+    Args:
+        df (pd.dataframe): Dataframe object to be saved in excel format
+        file_name (str): File name
+        tallyout (str): Tally out number
+    """
 
     if(not os.path.isdir('output/{}'.format(file_name))):
         os.makedirs('output/{}'.format(file_name))
@@ -197,4 +217,56 @@ def saveFinalAnalysis(df, file_name, tallyout):
     sheet.column_dimensions['E'].width = 20
     sheet.column_dimensions['F'].width = 20
     sheet.column_dimensions['G'].width = 20
+    
     workbook.save(file_path)
+    print(f'Saved file to - {file_path}')
+
+def finalInterpretationSave(db):
+    """This function takes the full db dictionary object containing all the dataframes gathered and saves them in an individual log interpretation file in the output folder
+
+    Args:
+        db (dict): Dictionary containing all log interpretation dataframes
+    """
+    database = {}
+    
+    for entry in db:
+
+        db_entry = db[entry]
+        db_entry['Errors'] = ''
+
+        tally_out_list = db_entry.loc[:, 'Tally Out'].unique()
+
+        tally_out_list
+
+        for tout in tally_out_list:
+
+            database[tout] = processDatabase(db_entry.loc[db_entry['Tally Out'] == tout])
+
+            for error in database[tout].loc[:, ['Indexes', 'Error']].iterrows():
+
+                if error[1]['Error'] == True:
+
+                    db_entry.loc[error[1]['Indexes'], 'Error'] = True
+
+            saveFinalAnalysis(database[tout], entry, tout)
+        
+        file_path = 'output/{}_log_interpretaion.xlsx'.format(entry)
+        db_entry.to_excel(file_path, index=False)
+
+        workbook = op.load_workbook(file_path)
+        sheet = workbook.active
+        sheet.column_dimensions['A'].width = 20
+        sheet.column_dimensions['B'].width = 20
+        sheet.column_dimensions['C'].width = 20
+        sheet.column_dimensions['D'].width = 20
+        sheet.column_dimensions['E'].width = 20
+        sheet.column_dimensions['F'].width = 20
+        sheet.column_dimensions['G'].width = 20
+        sheet.column_dimensions['H'].width = 20
+        sheet.column_dimensions['I'].width = 25
+        
+        util.excelStyler(sheet)
+
+        workbook.save(file_path)
+
+        print(f'Saved interpretation to - {file_path}')
