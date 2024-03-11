@@ -1,3 +1,9 @@
+**Dependencies:**
+Install the following dependencies:
+-Pandas
+-Numpy
+-Openpyxl
+
 **This is a program that will allow to convert the Tally Transaction Log Reports to a much readable format**
 This program also helps to identify possible errors in the report, as it iterates the transaction log report looking for common indicators of discrepancies or problems.
 
